@@ -120,3 +120,64 @@ test('is next called', () => {
     uhu: 4
   });
 });
+
+let myActionMock = jest.fn();
+interface testAction {
+  (cb: ActionFunction): ActionFunction;
+  // (name: string): (target: any, prop: string, descriptor: TypedPropertyDescriptor<Function>) => void;
+  (
+    target: any,
+    prop: string,
+    descriptor: TypedPropertyDescriptor<Function>
+  ): void;
+}
+
+function myShell(cb: ActionFunction): ActionFunction {
+  const ret = function(...args: unknown[]): unknown {
+    return cb.apply(this, args);
+  };
+  ret.myShell = true;
+  return ret;
+}
+
+function myTestAction(...args: any[]): unknown {
+  myActionMock(args);
+  if (
+    args.length == 3 &&
+    typeof args[0] === 'object' &&
+    args[0].hasOwnProperty('constructor') &&
+    typeof args[0].constructor.name === 'string' &&
+    typeof args[1] === 'string' &&
+    typeof args[2] === 'object' &&
+    typeof args[2].value === 'function'
+  ) {
+    args[2].value = myShell(args[2].value);
+    console.log('decorate', args);
+    return args[2];
+  }
+  console.log('normal', args);
+  return function(my: unknown[]) {
+    console.log('called', args);
+    return args[0].apply(this, my);
+  };
+}
+
+const testAction = myTestAction as testAction;
+
+class TestDecorators {
+  @testAction
+  public toDecorate(i: string) {
+    return i + 42;
+  }
+}
+
+test.only('decorate', () => {
+  debugger;
+  expect(myActionMock.mock.calls.length).toBe(1);
+  expect((TestDecorators.prototype.toDecorate as any).myShell).toBe(true);
+  const d = new TestDecorators();
+  expect((d.toDecorate as any).myShell).toBe(true);
+  const ret = d.toDecorate('jo');
+  expect(myActionMock.mock.calls.length).toBe(1);
+  expect(ret).toBe('jo42');
+});
